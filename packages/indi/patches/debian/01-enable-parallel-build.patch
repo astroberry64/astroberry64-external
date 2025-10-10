@@ -1,0 +1,10 @@
+--- a/debian/rules
++++ b/debian/rules
+@@ -1,4 +1,7 @@
+ #!/usr/bin/make -f
+
++# Enable parallel builds (use all available cores) - CDBS uses DEB_MAKE_PARALLEL
++DEB_MAKE_PARALLEL := -j$(shell nproc)
++
+ include /usr/share/cdbs/1/rules/debhelper.mk
+ include /usr/share/cdbs/1/class/cmake.mk

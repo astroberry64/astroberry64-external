@@ -47,7 +47,7 @@ for deb in "$PARENT_DIR"/*.deb; do
     if [ -f "$deb" ]; then
         echo "[build-debian]   $(basename "$deb")"
         mv "$deb" "$OUTPUT_DIR/"
-        ((DEB_COUNT++))
+        DEB_COUNT=$((DEB_COUNT + 1))
     fi
 done
 

@@ -21,7 +21,7 @@ if [ -d "$DEBIAN_PATCHES" ]; then
         if [ -f "$patch" ]; then
             echo "[apply-patches]   Applying $(basename "$patch")..."
             patch -d "$SOURCE_DIR" -p1 < "$patch"
-            ((patch_count++))
+            patch_count=$((patch_count + 1))
         fi
     done
 fi
@@ -33,7 +33,7 @@ if [ -d "$SOURCE_PATCHES" ]; then
         if [ -f "$patch" ]; then
             echo "[apply-patches]   Applying $(basename "$patch")..."
             patch -d "$SOURCE_DIR" -p1 < "$patch"
-            ((patch_count++))
+            patch_count=$((patch_count + 1))
         fi
     done
 fi

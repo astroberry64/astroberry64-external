@@ -22,7 +22,14 @@ From this single source, multiple binary packages are created:
 
 ## Patches
 
-Currently no patches applied. This directory structure is ready if we need to patch for Debian Trixie compatibility.
+### debian/01-enable-parallel-build.patch
+
+**Status**: Active
+**Reason**: INDI's debian/rules uses CDBS which doesn't automatically honor DEB_BUILD_OPTIONS set in environment. This patch adds parallel build support directly to debian/rules.
+
+**Effect**: Enables use of all CPU cores during compilation (4x faster on RPI5)
+
+**Can be removed when**: Upstream INDI adds proper parallel build support to debian/rules, or when CDBS is replaced with dh in debian/rules.
 
 ### When to add patches:
 - Dependency version mismatches in `debian/control`
