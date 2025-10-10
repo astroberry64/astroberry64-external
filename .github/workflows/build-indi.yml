@@ -1,0 +1,98 @@
+name: Build INDI Package
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/indi/**'
+      - 'scripts/**'
+      - '.github/workflows/build-indi.yml'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'APT suite to publish to'
+        required: true
+        default: 'testing'
+        type: choice
+        options:
+          - testing
+          - stable
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
+
+    - name: Build INDI packages in Debian Trixie arm64 container
+      run: |
+        docker run --rm --platform linux/arm64 \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          debian:trixie-slim \
+          bash -c '
+            set -e
+            echo "Installing base build tools..."
+            apt-get update
+            apt-get install -y debhelper devscripts cdbs cmake build-essential git
+
+            echo "Building INDI packages..."
+            ./scripts/build-package.sh indi
+
+            echo "Build artifacts:"
+            ls -lh build/output/
+          '
+
+    - name: Upload package artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: indi-packages
+        path: build/output/*.deb
+        if-no-files-found: error
+
+    - name: Upload build info
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-info
+        path: |
+          build/output/*.buildinfo
+          build/output/*.changes
+        if-no-files-found: warn
+
+    - name: Auto-commit to astroberry64-repo
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      env:
+        GH_TOKEN: ${{ secrets.ASTROBERRY64_REPO_TOKEN }}
+        SUITE: ${{ github.event.inputs.suite || 'testing' }}
+      run: |
+        # Clone the repo with token authentication
+        git clone https://x-access-token:${GH_TOKEN}@github.com/astroberry64/astroberry64-repo.git /tmp/repo
+        cd /tmp/repo
+
+        # Configure git
+        git config user.name "Astroberry64 Bot"
+        git config user.email "bot@astroberry64.github.io"
+
+        # Add all INDI packages to the suite
+        for deb in ${{ github.workspace }}/build/output/*.deb; do
+          if [ -f "$deb" ]; then
+            echo "Adding $(basename $deb) to ${SUITE} suite..."
+            ./add-package.sh "$deb" "${SUITE}"
+          fi
+        done
+
+        # Commit and push
+        git add dists/trixie-${SUITE} pool
+        git commit -m "Auto-add INDI packages to ${SUITE} suite"$'\n\n'"Built from ${{ github.repository }}@${{ github.sha }}"$'\n\n'"🤖 Automated build via GitHub Actions" || echo "No changes to commit"
+        git push origin main || echo "Nothing to push"
