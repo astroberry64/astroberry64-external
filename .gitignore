@@ -1,0 +1,21 @@
+# Build artifacts
+*.deb
+*.build
+*.buildinfo
+*.changes
+*.dsc
+*.tar.gz
+*.tar.xz
+
+# Build directories (usually in ~/ not in repo)
+build/
+output/
+
+# Temporary files
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git LFS will handle archived-sources/ separately
+# archived-sources/*.tar.*
