@@ -10,6 +10,12 @@ CONFIG_FILE="$2"
 # shellcheck source=/dev/null
 source "$CONFIG_FILE"
 
+# Use sudo only if not running as root (for Docker container compatibility)
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+    SUDO="sudo"
+fi
+
 echo "[install-build-deps] Installing build dependencies..."
 
 # First, ensure basic build tools are installed
@@ -24,8 +30,8 @@ echo "[install-build-deps] Checking basic build tools..."
 for tool in "${BASIC_TOOLS[@]}"; do
     if ! dpkg -l "$tool" &>/dev/null; then
         echo "[install-build-deps] Installing $tool..."
-        sudo apt-get update -qq
-        sudo apt-get install -y "$tool"
+        $SUDO apt-get update -qq
+        $SUDO apt-get install -y "$tool"
     fi
 done
 
@@ -34,11 +40,11 @@ if [ -f "$SOURCE_DIR/debian/control" ]; then
     echo "[install-build-deps] Found debian/control, using apt-get build-dep..."
 
     # Update package lists
-    sudo apt-get update -qq
+    $SUDO apt-get update -qq
 
     # Install build dependencies
     # Using -y for non-interactive, --no-install-recommends to minimize deps
-    sudo apt-get build-dep -y "$SOURCE_DIR"
+    $SUDO apt-get build-dep -y "$SOURCE_DIR"
 
     echo "[install-build-deps] Build dependencies installed successfully"
 else
@@ -56,8 +62,8 @@ else
             PACKAGES+=("$pkg")
         done
 
-        sudo apt-get update -qq
-        sudo apt-get install -y "${PACKAGES[@]}"
+        $SUDO apt-get update -qq
+        $SUDO apt-get install -y "${PACKAGES[@]}"
 
         echo "[install-build-deps] BUILD_DEPS installed successfully"
     else
