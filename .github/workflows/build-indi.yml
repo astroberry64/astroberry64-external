@@ -43,6 +43,8 @@ jobs:
           debian:trixie-slim \
           bash -c '
             set -e
+            export DEBIAN_FRONTEND=noninteractive
+
             echo "Installing base build tools..."
             apt-get update
             apt-get install -y debhelper devscripts cdbs cmake build-essential git
