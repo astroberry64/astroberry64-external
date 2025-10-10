@@ -31,9 +31,10 @@ cd "$SOURCE_DIR"
 # Build the package
 # -us -uc: Don't sign source/changes (we're not uploading to Debian)
 # -b: Binary-only build (no source package)
-# -j$(nproc): Parallel build
-echo "[build-debian] Running dpkg-buildpackage..."
-dpkg-buildpackage -us -uc -b -j"$(nproc)"
+# DEB_BUILD_OPTIONS=parallel=N: Enable parallel build (works with CDBS)
+echo "[build-debian] Running dpkg-buildpackage with $(nproc) parallel jobs..."
+export DEB_BUILD_OPTIONS="parallel=$(nproc)"
+dpkg-buildpackage -us -uc -b
 
 # Find the parent directory where .deb files were created
 PARENT_DIR="$(dirname "$SOURCE_DIR")"
