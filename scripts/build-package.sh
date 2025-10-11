@@ -176,11 +176,13 @@ log_info "Built packages:"
 find "$OUTPUT_DIR" -name "*.deb" -type f -printf "  %f\n"
 
 # Step 6: Optional deployment
+# Set REPO_DIR for use in deployment messages
+REPO_DIR="${ASTROBERRY64_REPO:-$HOME/src/astroberry64-repo}"
+
 if [ "${AUTO_DEPLOY:-0}" = "1" ]; then
     log_info "AUTO_DEPLOY=1, deploying to trixie-testing..."
 
     # Check if we have the astroberry64-repo available
-    REPO_DIR="${ASTROBERRY64_REPO:-$HOME/src/astroberry64-repo}"
     if [ ! -d "$REPO_DIR" ]; then
         log_error "astroberry64-repo not found at: $REPO_DIR"
         log_error "Set ASTROBERRY64_REPO environment variable or clone it"
