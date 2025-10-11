@@ -1,12 +1,27 @@
-name: Build External Package
+name: Build External Packages
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/**'
+      - 'scripts/**'
+      - '.github/workflows/build-external.yml'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       package:
-        description: 'Package name to build (e.g., indi, phd2, kstars)'
-        required: true
-        type: string
+        description: 'Package to build (leave empty to build all changed packages)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - indi
+          - phd2
+          - kstars
       suite:
         description: 'APT suite to publish to'
         required: true
@@ -24,66 +39,144 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Validate package exists
-      run: |
-        if [ ! -d "packages/${{ github.event.inputs.package }}" ]; then
-          echo "ERROR: Package directory not found: packages/${{ github.event.inputs.package }}"
-          echo "Available packages:"
-          ls -1 packages/
-          exit 1
-        fi
-        echo "Building package: ${{ github.event.inputs.package }}"
+    - name: Filter changed packages
+      uses: dorny/paths-filter@v3
+      id: package-change
+      with:
+        filters: |
+          indi:
+            - 'packages/indi/**'
+            - 'scripts/**'
+          phd2:
+            - 'packages/phd2/**'
+            - 'scripts/**'
+          kstars:
+            - 'packages/kstars/**'
+            - 'scripts/**'
 
     - name: Set up QEMU
+      if: |
+        steps.package-change.outputs.indi == 'true' ||
+        steps.package-change.outputs.phd2 == 'true' ||
+        steps.package-change.outputs.kstars == 'true' ||
+        github.event.inputs.package != ''
       uses: docker/setup-qemu-action@v3
       with:
         platforms: arm64
 
-    - name: Build package in Debian Trixie arm64 container
+    - name: Build INDI
+      if: |
+        steps.package-change.outputs.indi == 'true' ||
+        github.event.inputs.package == 'indi'
       run: |
+        echo "Building INDI package..."
         docker run --rm --platform linux/arm64 \
           -v ${{ github.workspace }}:/workspace \
           -w /workspace \
-          -e BUILD_DIR=/workspace/build \
-          -e OUTPUT_DIR=/workspace/build/output \
           debian:trixie-slim \
           bash -c '
             set -e
             export DEBIAN_FRONTEND=noninteractive
+            export BUILD_DIR=/workspace/build
+            export OUTPUT_DIR=/workspace/build/output
 
             echo "Installing base build tools..."
             apt-get update
             apt-get install -y debhelper devscripts cdbs cmake build-essential git
 
-            echo "Building package: ${{ github.event.inputs.package }}..."
-            ./scripts/build-package.sh ${{ github.event.inputs.package }}
+            echo "Building INDI..."
+            ./scripts/build-package.sh indi
 
             echo "Build artifacts:"
-            ls -lh build/output/
+            ls -lh /workspace/build/output/
+          '
+
+    - name: Build PHD2
+      if: |
+        steps.package-change.outputs.phd2 == 'true' ||
+        github.event.inputs.package == 'phd2'
+      run: |
+        echo "Building PHD2 package..."
+        docker run --rm --platform linux/arm64 \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          debian:trixie-slim \
+          bash -c '
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            export BUILD_DIR=/workspace/build
+            export OUTPUT_DIR=/workspace/build/output
+
+            echo "Installing base build tools..."
+            apt-get update
+            apt-get install -y debhelper devscripts cdbs cmake build-essential git
+
+            echo "Building PHD2..."
+            ./scripts/build-package.sh phd2
+
+            echo "Build artifacts:"
+            ls -lh /workspace/build/output/
+          '
+
+    - name: Build KStars
+      if: |
+        steps.package-change.outputs.kstars == 'true' ||
+        github.event.inputs.package == 'kstars'
+      run: |
+        echo "Building KStars package..."
+        docker run --rm --platform linux/arm64 \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          debian:trixie-slim \
+          bash -c '
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            export BUILD_DIR=/workspace/build
+            export OUTPUT_DIR=/workspace/build/output
+
+            echo "Installing base build tools..."
+            apt-get update
+            apt-get install -y debhelper devscripts cdbs cmake build-essential git
+
+            echo "Building KStars..."
+            ./scripts/build-package.sh kstars
+
+            echo "Build artifacts:"
+            ls -lh /workspace/build/output/
           '
 
     - name: Upload package artifacts
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.event.inputs.package }}-packages
+        name: packages
         path: build/output/*.deb
-        if-no-files-found: error
+        if-no-files-found: warn
 
     - name: Upload build info
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.event.inputs.package }}-build-info
+        name: build-info
         path: |
           build/output/*.buildinfo
           build/output/*.changes
         if-no-files-found: warn
 
     - name: Auto-commit to astroberry64-repo
-      if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+      if: |
+        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+        github.event_name == 'workflow_dispatch'
       env:
         GH_TOKEN: ${{ secrets.ASTROBERRY64_REPO_TOKEN }}
         SUITE: ${{ github.event.inputs.suite || 'testing' }}
       run: |
+        # Only proceed if we have .deb files
+        if ! ls build/output/*.deb 1> /dev/null 2>&1; then
+          echo "No .deb files found, skipping deployment"
+          exit 0
+        fi
+
         # Clone the repo with token authentication
         git clone https://x-access-token:${GH_TOKEN}@github.com/astroberry64/astroberry64-repo.git /tmp/repo
         cd /tmp/repo
@@ -102,5 +195,5 @@ jobs:
 
         # Commit and push
         git add dists/trixie-${SUITE} pool
-        git commit -m "Auto-add ${{ github.event.inputs.package }} packages to ${SUITE} suite"$'\n\n'"Built from ${{ github.repository }}@${{ github.sha }}"$'\n\n'"🤖 Automated build via GitHub Actions" || echo "No changes to commit"
+        git commit -m "Auto-add external packages to ${SUITE} suite"$'\n\n'"Built from ${{ github.repository }}@${{ github.sha }}"$'\n\n'"🤖 Automated build via GitHub Actions" || echo "No changes to commit"
         git push origin main || echo "Nothing to push"
