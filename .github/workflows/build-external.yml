@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths-ignore:
-      - '.github/workflows/check-external-updates.yml'
+      - ".github/workflows/**"
       - '**.md'
       - '.gitignore'
   pull_request:
@@ -44,6 +44,31 @@ jobs:
           indi:
             - 'packages/indi/**'
 
+    - name: Verify single package per commit
+      if: github.event_name == 'push'
+      run: |
+        CHANGED_COUNT=0
+        [[ "${{ steps.package-change.outputs.indi }}" == "true" ]] && ((CHANGED_COUNT++))
+
+        if [[ $CHANGED_COUNT -gt 1 ]]; then
+          echo "❌ ERROR: Multiple packages changed in one commit"
+          echo ""
+          echo "Only one package per commit is supported for isolated deployment tracking."
+          echo "This ensures each package's build and deployment can be tracked independently."
+          echo ""
+          echo "Changed packages detected:"
+          [[ "${{ steps.package-change.outputs.indi }}" == "true" ]] && echo "  - indi"
+          echo ""
+          echo "Please split your changes into separate commits, one per package."
+          exit 1
+        fi
+
+        if [[ $CHANGED_COUNT -eq 0 ]]; then
+          echo "ℹ️  No package changes detected, skipping build"
+        else
+          echo "✅ Single package change detected, proceeding with build"
+        fi
+
     - name: Set up QEMU
       if: |
         steps.package-change.outputs.indi == 'true' ||
@@ -80,7 +105,7 @@ jobs:
           '
 
     - name: Upload package artifacts
-      if: always()
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: packages
@@ -88,7 +113,7 @@ jobs:
         if-no-files-found: warn
 
     - name: Upload build info
-      if: always()
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: build-info
