@@ -1,0 +1,52 @@
+name: Check External Package Updates
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: 'Packages to check (comma-separated, or leave empty for all)'
+        required: false
+        type: string
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write  # Allow committing changes
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Check for package updates
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Configure git for commits
+        git config user.name "Astroberry64 Bot"
+        git config user.email "bot@astroberry64.github.io"
+
+        # Run check script
+        if [ -n "${{ github.event.inputs.packages }}" ]; then
+          echo "Checking specified packages: ${{ github.event.inputs.packages }}"
+          ./scripts/check-all-updates.sh --packages "${{ github.event.inputs.packages }}" --commit
+        else
+          echo "Checking all packages..."
+          ./scripts/check-all-updates.sh --all --commit
+        fi
+
+    - name: Push changes
+      if: success()
+      run: |
+        # Check if there are any commits to push
+        if git log @{u}.. --oneline | grep -q .; then
+          echo "Pushing version updates..."
+          git push origin main
+          echo "✅ Updates pushed successfully"
+        else
+          echo "No updates found, nothing to push"
+        fi
