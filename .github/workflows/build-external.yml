@@ -4,24 +4,21 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'packages/**'
-      - 'scripts/**'
-      - '.github/workflows/build-external.yml'
+    paths-ignore:
+      - '.github/workflows/check-external-updates.yml'
+      - '**.md'
+      - '.gitignore'
   pull_request:
     branches:
       - main
   workflow_dispatch:
     inputs:
       package:
-        description: 'Package to build (leave empty to build all changed packages)'
-        required: false
+        description: 'Package to build'
+        required: true
         type: choice
         options:
-          - ''
           - indi
-          - phd2
-          - kstars
       suite:
         description: 'APT suite to publish to'
         required: true
@@ -46,20 +43,11 @@ jobs:
         filters: |
           indi:
             - 'packages/indi/**'
-            - 'scripts/**'
-          phd2:
-            - 'packages/phd2/**'
-            - 'scripts/**'
-          kstars:
-            - 'packages/kstars/**'
-            - 'scripts/**'
 
     - name: Set up QEMU
       if: |
         steps.package-change.outputs.indi == 'true' ||
-        steps.package-change.outputs.phd2 == 'true' ||
-        steps.package-change.outputs.kstars == 'true' ||
-        github.event.inputs.package != ''
+        github.event.inputs.package == 'indi'
       uses: docker/setup-qemu-action@v3
       with:
         platforms: arm64
@@ -86,60 +74,6 @@ jobs:
 
             echo "Building INDI..."
             ./scripts/build-package.sh indi
-
-            echo "Build artifacts:"
-            ls -lh /workspace/build/output/
-          '
-
-    - name: Build PHD2
-      if: |
-        steps.package-change.outputs.phd2 == 'true' ||
-        github.event.inputs.package == 'phd2'
-      run: |
-        echo "Building PHD2 package..."
-        docker run --rm --platform linux/arm64 \
-          -v ${{ github.workspace }}:/workspace \
-          -w /workspace \
-          debian:trixie-slim \
-          bash -c '
-            set -e
-            export DEBIAN_FRONTEND=noninteractive
-            export BUILD_DIR=/workspace/build
-            export OUTPUT_DIR=/workspace/build/output
-
-            echo "Installing base build tools..."
-            apt-get update
-            apt-get install -y debhelper devscripts cdbs cmake build-essential git
-
-            echo "Building PHD2..."
-            ./scripts/build-package.sh phd2
-
-            echo "Build artifacts:"
-            ls -lh /workspace/build/output/
-          '
-
-    - name: Build KStars
-      if: |
-        steps.package-change.outputs.kstars == 'true' ||
-        github.event.inputs.package == 'kstars'
-      run: |
-        echo "Building KStars package..."
-        docker run --rm --platform linux/arm64 \
-          -v ${{ github.workspace }}:/workspace \
-          -w /workspace \
-          debian:trixie-slim \
-          bash -c '
-            set -e
-            export DEBIAN_FRONTEND=noninteractive
-            export BUILD_DIR=/workspace/build
-            export OUTPUT_DIR=/workspace/build/output
-
-            echo "Installing base build tools..."
-            apt-get update
-            apt-get install -y debhelper devscripts cdbs cmake build-essential git
-
-            echo "Building KStars..."
-            ./scripts/build-package.sh kstars
 
             echo "Build artifacts:"
             ls -lh /workspace/build/output/
