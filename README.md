@@ -175,8 +175,6 @@ packages/kstars-bleeding/
 └── README.md                         # Documentation
 ```
 
-Plus a new source fetcher: `scripts/sources/get-from-ppa.sh` to download from Ubuntu PPAs.
-
 **Step 2: Add CI/CD automation** (simplified workflow)
 
 Only need to add **2 lines** to `.github/workflows/build-external.yml`:
@@ -185,7 +183,7 @@ Only need to add **2 lines** to `.github/workflows/build-external.yml`:
 filters: |
   indi:
     - 'packages/indi/**'
-  kstars-bleeding:              # ← Add package name
+  kstars-bleeding:                   # ← Add package name
     - 'packages/kstars-bleeding/**'  # ← Add path filter
 ```
 
@@ -205,7 +203,6 @@ gh workflow run build-external.yml -f package=kstars-bleeding
 See the full history:
 - Package addition: `git show 1e6c567`
 - Initial workflow: `git show 384b97b`
-- Simplified workflow: `git show HEAD` (current)
 
 ## Technical Details
 
@@ -326,60 +323,3 @@ The scripts will auto-install:
 - debhelper
 - fakeroot
 - Package-specific build deps from `debian/control`
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Test locally on a 64-bit RPI
-4. Submit PR with:
-   - New/modified package configs
-   - Updated package README
-   - Patch documentation (if applicable)
-
-### Example: Adding KStars Bleeding
-
-Here's what was added to integrate KStars Bleeding into the build system:
-
-**Step 1: Add package configuration** (see commit `1e6c567`)
-
-Created `packages/kstars-bleeding/` with:
-```
-packages/kstars-bleeding/
-├── config.sh                         # Source: PPA, Build: debian
-├── patches/debian/
-│   └── 01-fix-build-for-non-debian-maintainers.patch
-└── README.md                         # Documentation
-```
-
-Plus a new source fetcher: `scripts/sources/get-from-ppa.sh` to download from Ubuntu PPAs.
-
-**Step 2: Add CI/CD automation** (simplified workflow)
-
-Only need to add **2 lines** to `.github/workflows/build-external.yml`:
-
-```yaml
-filters: |
-  indi:
-    - 'packages/indi/**'
-  kstars-bleeding:              # ← Add package name
-    - 'packages/kstars-bleeding/**'  # ← Add path filter
-```
-
-That's it! The workflow automatically:
-- Detects changes via path filter
-- Verifies single package per commit
-- Builds the package using the unified build step
-- Deploys to testing suite
-
-**Manual trigger**:
-```bash
-gh workflow run build-external.yml -f package=kstars-bleeding
-```
-
-**Result**: Push to `packages/kstars-bleeding/` automatically triggers build → deploys .deb packages to APT testing suite.
-
-See the full history:
-- Package addition: `git show 1e6c567`
-- Initial workflow: `git show 384b97b`
-- Simplified workflow: `git show HEAD` (current)
