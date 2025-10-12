@@ -135,6 +135,9 @@ jobs:
             export BUILD_DIR=/workspace/build
             export OUTPUT_DIR=/workspace/build/output
 
+            echo "Adding Astroberry64 APT repository..."
+            echo "deb [trusted=yes] https://astroberry64.github.io/astroberry64-repo/ trixie-testing main" > /etc/apt/sources.list.d/astroberry64.list
+
             echo "Installing base build tools..."
             apt-get update
             apt-get install -y debhelper devscripts cdbs cmake build-essential git curl jq
