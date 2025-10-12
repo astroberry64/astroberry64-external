@@ -102,7 +102,7 @@ jobs:
 
             echo "Installing base build tools..."
             apt-get update
-            apt-get install -y debhelper devscripts cdbs cmake build-essential git
+            apt-get install -y debhelper devscripts cdbs cmake build-essential git curl jq
 
             echo "Building INDI..."
             ./scripts/build-package.sh indi
@@ -129,7 +129,7 @@ jobs:
 
             echo "Installing base build tools..."
             apt-get update
-            apt-get install -y debhelper devscripts cdbs cmake build-essential git
+            apt-get install -y debhelper devscripts cdbs cmake build-essential git curl jq
 
             echo "Building KStars Bleeding..."
             ./scripts/build-package.sh kstars-bleeding
