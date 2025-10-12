@@ -1,0 +1,27 @@
+--- a/debian/rules	2025-10-12 00:56:47.790026783 +0100
++++ b/debian/rules	2025-10-12 00:56:56.337951095 +0100
+@@ -1,16 +1,18 @@
+ #!/usr/bin/make -f
+ 
+-export DEB_BUILD_MAINT_OPTIONS = optimize=-lto
++# Enable parallel builds (use all available CPU cores)
++export DEB_BUILD_OPTIONS := parallel=$(shell nproc)
+ 
+-l10npkgs_firstversion_ok := 4:17.03.90-0~
++# Keep compiler optimization from original
++export DEB_BUILD_MAINT_OPTIONS = optimize=-lto
+ 
+-include /usr/share/pkg-kde-tools/qt-kde-team/2/debian-qt-kde.mk
+-include /usr/share/pkg-kde-tools/qt-kde-team/2/l10n-packages.mk
++# Use standard debhelper with KDE Frameworks 5 support
++# (replaces restricted debian-qt-kde.mk which only Debian Qt/KDE team can use)
++%:
++	dh $@ --with kf5
+ 
+ override_dh_strip:
+ 	dh_strip --dbg-package=kstars-bleeding-dbg
+-	
+ override_dh_auto_configure:
+ 	dh_auto_configure -- -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=Off
+ 
+-.PHONY: override_dh_auto_test override_dh_auto_configure
