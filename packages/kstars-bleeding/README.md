@@ -49,6 +49,34 @@ debian_qt_kde.mk usage denied by policy.
 - The restricted makefiles are meant for Debian team use only
 - Standard debhelper would make his PPA more portable
 
+### debian/02-move-dbg-to-recommends.patch
+
+**What it fixes**: Moves kstars-bleeding-dbg from Depends to Recommends
+
+**Why needed**:
+The upstream package has a hard dependency on the debug package:
+```debian/control
+Depends: ..., kstars-bleeding-dbg (= ${binary:Version}), ...
+```
+
+Debug packages are very large (90-200 MB) and exceed GitHub's 100MB file limit for repository storage.
+For the APT repository hosted on GitHub Pages, we skip debug packages to stay within limits.
+
+**What the patch does**:
+- Moves `kstars-bleeding-dbg (= ${binary:Version})` from `Depends:` to `recommends:`
+- Makes debug symbols optional instead of required
+- Allows KStars to install without the debug package
+
+**When can it be removed?**:
+- If we move to a different APT repository host without size constraints
+- If upstream changes policy on debug package dependencies
+- Check each new version from PPA to see if approach changed
+
+**Should it go upstream?**:
+- Possibly - Hard dependencies on debug packages are unusual
+- Debug symbols are typically optional (Recommends or Suggests)
+- Most users don't need debug symbols unless developing/debugging
+
 ## Build Dependencies
 
 KStars bleeding edge from ppa:mutlaqja/ppa requires:

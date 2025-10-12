@@ -1,0 +1,13 @@
+--- a/debian/control	2025-10-12 22:00:00.000000000 +0000
++++ b/debian/control	2025-10-12 22:00:00.000000000 +0000
+@@ -3,8 +3,8 @@
+ Section: science
+ conflicts: kstars
+ replaces: kstars
+-recommends: xplanet, xplanet-images
+-Depends: ${shlibs:Depends}, ${misc:Depends}, kstars-bleeding-data (>= ${source:Version}), kstars-bleeding-dbg (= ${binary:Version}), kded5, kinit, libindi1, indi-bin, breeze-icon-theme, libqt5sql5-sqlite, qml-module-qtquick-controls
++recommends: xplanet, xplanet-images, kstars-bleeding-dbg (= ${binary:Version})
++Depends: ${shlibs:Depends}, ${misc:Depends}, kstars-bleeding-data (>= ${source:Version}), kded5, kinit, libindi1, indi-bin, breeze-icon-theme, libqt5sql5-sqlite, qml-module-qtquick-controls
+ Description: desktop planetarium for KDE
+  KStars is a desktop planetarium for KDE, depicting an accurate graphical
+  simulation of the night sky, from any location on Earth, at any date and time.
