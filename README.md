@@ -186,15 +186,23 @@ astroberry64-external/
 │       └── build-make.sh
 │
 ├── packages/                         # Package configurations
-│   └── indi/
-│       ├── config.sh                 # Build configuration
-│       ├── patches/                  # Patches for compatibility
-│       │   ├── debian/               # Patches to debian/*
-│       │   └── source/               # Patches to source code
-│       └── README.md                 # Package-specific docs
+│   ├── indi/
+│   │   ├── config.sh                 # Build configuration
+│   │   ├── patches/                  # Patches for compatibility
+│   │   │   ├── debian/               # Patches to debian/*
+│   │   │   └── source/               # Patches to source code
+│   │   └── README.md                 # Package-specific docs
+│   └── kstars-bleeding/
+│       ├── config.sh                 # Build configuration (PPA source)
+│       ├── patches/
+│       │   └── debian/               # Debian packaging patches
+│       │       └── 01-fix-build-for-non-debian-maintainers.patch
+│       └── README.md                 # Package documentation
 │
 ├── archived-sources/                 # Manual downloads (Git LFS)
 └── .github/workflows/                # CI/CD automation
+    ├── build-external.yml            # Build and deploy packages
+    └── check-external-updates.yml    # Daily version checker
 ```
 
 #### Build Flow
@@ -273,12 +281,6 @@ The scripts will auto-install:
 - fakeroot
 - Package-specific build deps from `debian/control`
 
-#### Manual Prerequisites
-
-- Git
-- sudo access (for apt-get)
-- arm64 architecture (RPI4/RPI5 or similar)
-
 ## Contributing
 
 1. Fork the repository
@@ -288,3 +290,56 @@ The scripts will auto-install:
    - New/modified package configs
    - Updated package README
    - Patch documentation (if applicable)
+
+### Example: Adding KStars Bleeding
+
+Here's what was added to integrate KStars Bleeding into the build system:
+
+**Step 1: Add package configuration** (see commit `1e6c567`)
+
+Created `packages/kstars-bleeding/` with:
+```
+packages/kstars-bleeding/
+├── config.sh                         # Source: PPA, Build: debian
+├── patches/debian/
+│   └── 01-fix-build-for-non-debian-maintainers.patch
+└── README.md                         # Documentation
+```
+
+**Step 2: Add CI/CD automation** (see commit `384b97b`)
+
+Modified `.github/workflows/build-external.yml` to add:
+
+1. **Path filter** for automatic builds:
+```yaml
+kstars-bleeding:
+  - 'packages/kstars-bleeding/**'
+```
+
+2. **Manual trigger option**:
+```yaml
+options:
+  - indi
+  - kstars-bleeding  # Added
+```
+
+3. **Build step** that runs on changes:
+```yaml
+- name: Build KStars Bleeding
+  if: |
+    steps.package-change.outputs.kstars-bleeding == 'true' ||
+    github.event.inputs.package == 'kstars-bleeding'
+  run: |
+    ./scripts/build-package.sh kstars-bleeding
+```
+
+4. **Verification logic** to enforce one package per commit:
+```bash
+[[ "${{ steps.package-change.outputs.kstars-bleeding }}" == "true" ]] && ((CHANGED_COUNT++))
+```
+
+**Result**: Push to `packages/kstars-bleeding/` automatically triggers build → deploys deb packages to APT testing suite.
+
+See the full diffs:
+- Package addition: `git show 1e6c567`
+- Workflow integration: `git show 384b97b`
