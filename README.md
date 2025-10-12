@@ -59,10 +59,9 @@ When changes are pushed to `main`:
 
 **Manual trigger**:
 ```bash
-# Build and deploy a specific package
-gh workflow run build-external.yml -f package=indi -f suite=testing
-
-# Or trigger via push to main after editing package config
+# Build and deploy a specific package to testing suite
+gh workflow run build-external.yml -f package=indi
+gh workflow run build-external.yml -f package=kstars-bleeding
 ```
 
 ### Testing & Iteration Workflow
@@ -306,40 +305,34 @@ packages/kstars-bleeding/
 └── README.md                         # Documentation
 ```
 
-**Step 2: Add CI/CD automation** (see commit `384b97b`)
+Plus a new source fetcher: `scripts/sources/get-from-ppa.sh` to download from Ubuntu PPAs.
 
-Modified `.github/workflows/build-external.yml` to add:
+**Step 2: Add CI/CD automation** (simplified workflow)
 
-1. **Path filter** for automatic builds:
+Only need to add **2 lines** to `.github/workflows/build-external.yml`:
+
 ```yaml
-kstars-bleeding:
-  - 'packages/kstars-bleeding/**'
+filters: |
+  indi:
+    - 'packages/indi/**'
+  kstars-bleeding:              # ← Add package name
+    - 'packages/kstars-bleeding/**'  # ← Add path filter
 ```
 
-2. **Manual trigger option**:
-```yaml
-options:
-  - indi
-  - kstars-bleeding  # Added
-```
+That's it! The workflow automatically:
+- Detects changes via path filter
+- Verifies single package per commit
+- Builds the package using the unified build step
+- Deploys to testing suite
 
-3. **Build step** that runs on changes:
-```yaml
-- name: Build KStars Bleeding
-  if: |
-    steps.package-change.outputs.kstars-bleeding == 'true' ||
-    github.event.inputs.package == 'kstars-bleeding'
-  run: |
-    ./scripts/build-package.sh kstars-bleeding
-```
-
-4. **Verification logic** to enforce one package per commit:
+**Manual trigger**:
 ```bash
-[[ "${{ steps.package-change.outputs.kstars-bleeding }}" == "true" ]] && ((CHANGED_COUNT++))
+gh workflow run build-external.yml -f package=kstars-bleeding
 ```
 
-**Result**: Push to `packages/kstars-bleeding/` automatically triggers build → deploys deb packages to APT testing suite.
+**Result**: Push to `packages/kstars-bleeding/` automatically triggers build → deploys .deb packages to APT testing suite.
 
-See the full diffs:
+See the full history:
 - Package addition: `git show 1e6c567`
-- Workflow integration: `git show 384b97b`
+- Initial workflow: `git show 384b97b`
+- Simplified workflow: `git show HEAD` (current)

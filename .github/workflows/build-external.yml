@@ -14,20 +14,9 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: 'Package to build'
+        description: 'Package to build (e.g. indi, kstars-bleeding)'
         required: true
-        type: choice
-        options:
-          - indi
-          - kstars-bleeding
-      suite:
-        description: 'APT suite to publish to'
-        required: true
-        default: 'testing'
-        type: choice
-        options:
-          - testing
-          - stable
+        type: string
 
 jobs:
   build:
@@ -37,6 +26,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # Keep explicit path filters (good for caching, clear triggers)
     - name: Filter changed packages
       uses: dorny/paths-filter@v3
       id: package-change
@@ -47,49 +37,94 @@ jobs:
           kstars-bleeding:
             - 'packages/kstars-bleeding/**'
 
-    - name: Verify single package per commit
-      if: github.event_name == 'push'
+    # Consolidated detection and verification - uses toJSON() for dynamic parsing
+    - name: Detect and verify package
+      id: detect
+      env:
+        # GitHub Actions magic: converts all filter outputs to JSON automatically
+        FILTER_OUTPUTS: ${{ toJSON(steps.package-change.outputs) }}
+        MANUAL_PACKAGE: ${{ github.event.inputs.package }}
+        EVENT_NAME: ${{ github.event_name }}
       run: |
-        CHANGED_COUNT=0
-        [[ "${{ steps.package-change.outputs.indi }}" == "true" ]] && ((CHANGED_COUNT++))
-        [[ "${{ steps.package-change.outputs.kstars-bleeding }}" == "true" ]] && ((CHANGED_COUNT++))
+        set -e
 
-        if [[ $CHANGED_COUNT -gt 1 ]]; then
-          echo "❌ ERROR: Multiple packages changed in one commit"
-          echo ""
-          echo "Only one package per commit is supported for isolated deployment tracking."
-          echo "This ensures each package's build and deployment can be tracked independently."
-          echo ""
-          echo "Changed packages detected:"
-          [[ "${{ steps.package-change.outputs.indi }}" == "true" ]] && echo "  - indi"
-          [[ "${{ steps.package-change.outputs.kstars-bleeding }}" == "true" ]] && echo "  - kstars-bleeding"
-          echo ""
-          echo "Please split your changes into separate commits, one per package."
-          exit 1
-        fi
+        PACKAGE_TO_BUILD=""
 
-        if [[ $CHANGED_COUNT -eq 0 ]]; then
-          echo "ℹ️  No package changes detected, skipping build"
+        if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+          # Manual trigger
+          echo "Manual trigger: building '$MANUAL_PACKAGE'"
+          PACKAGE_TO_BUILD="$MANUAL_PACKAGE"
+
+          # Validate package exists
+          if [ ! -d "packages/$PACKAGE_TO_BUILD" ]; then
+            echo "❌ ERROR: Package 'packages/$PACKAGE_TO_BUILD' does not exist"
+            echo ""
+            echo "Available packages:"
+            ls -1 packages/ | grep -v '^\.'
+            exit 1
+          fi
+
         else
-          echo "✅ Single package change detected, proceeding with build"
+          # Auto-detect from changed files using JSON parsing
+          echo "Auto-detecting changed packages from filter outputs..."
+
+          # Parse JSON to extract package names where value is "true"
+          # This automatically works for any packages defined in the filters!
+          CHANGED_PACKAGES=$(echo "$FILTER_OUTPUTS" | jq -r 'to_entries | map(select(.value == "true")) | .[].key')
+
+          # Convert to bash array
+          readarray -t PACKAGES <<< "$CHANGED_PACKAGES"
+
+          # Remove empty elements
+          PACKAGES=("${PACKAGES[@]}")
+
+          echo "Detected ${#PACKAGES[@]} changed package(s)"
+
+          # Verify single package per commit
+          if [ ${#PACKAGES[@]} -gt 1 ]; then
+            echo "❌ ERROR: Multiple packages changed in one commit"
+            echo ""
+            echo "Only one package per commit is supported for isolated deployment tracking."
+            echo "This ensures each package's build and deployment can be tracked independently."
+            echo ""
+            echo "Changed packages detected:"
+            for pkg in "${PACKAGES[@]}"; do
+              echo "  - $pkg"
+            done
+            echo ""
+            echo "Please split your changes into separate commits, one per package."
+            exit 1
+          fi
+
+          if [ ${#PACKAGES[@]} -eq 0 ]; then
+            echo "ℹ️  No package changes detected, skipping build"
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          PACKAGE_TO_BUILD="${PACKAGES[0]}"
+          echo "✅ Single package change detected: $PACKAGE_TO_BUILD"
         fi
+
+        # Export for next steps
+        echo "package=$PACKAGE_TO_BUILD" >> $GITHUB_OUTPUT
+        echo "should_build=true" >> $GITHUB_OUTPUT
+        echo ""
+        echo "Will build: $PACKAGE_TO_BUILD"
 
     - name: Set up QEMU
-      if: |
-        steps.package-change.outputs.indi == 'true' ||
-        steps.package-change.outputs.kstars-bleeding == 'true' ||
-        github.event.inputs.package == 'indi' ||
-        github.event.inputs.package == 'kstars-bleeding'
+      if: steps.detect.outputs.should_build == 'true'
       uses: docker/setup-qemu-action@v3
       with:
         platforms: arm64
 
-    - name: Build INDI
-      if: |
-        steps.package-change.outputs.indi == 'true' ||
-        github.event.inputs.package == 'indi'
+    # Single consolidated build step - no more duplication!
+    - name: Build package
+      if: steps.detect.outputs.should_build == 'true'
+      env:
+        PACKAGE: ${{ steps.detect.outputs.package }}
       run: |
-        echo "Building INDI package..."
+        echo "Building package: $PACKAGE"
         docker run --rm --platform linux/arm64 \
           -v ${{ github.workspace }}:/workspace \
           -w /workspace \
@@ -104,42 +139,16 @@ jobs:
             apt-get update
             apt-get install -y debhelper devscripts cdbs cmake build-essential git curl jq
 
-            echo "Building INDI..."
-            ./scripts/build-package.sh indi
+            echo "Building '"$PACKAGE"'..."
+            ./scripts/build-package.sh '"$PACKAGE"'
 
-            echo "Build artifacts:"
-            ls -lh /workspace/build/output/
-          '
-
-    - name: Build KStars Bleeding
-      if: |
-        steps.package-change.outputs.kstars-bleeding == 'true' ||
-        github.event.inputs.package == 'kstars-bleeding'
-      run: |
-        echo "Building KStars Bleeding package..."
-        docker run --rm --platform linux/arm64 \
-          -v ${{ github.workspace }}:/workspace \
-          -w /workspace \
-          debian:trixie-slim \
-          bash -c '
-            set -e
-            export DEBIAN_FRONTEND=noninteractive
-            export BUILD_DIR=/workspace/build
-            export OUTPUT_DIR=/workspace/build/output
-
-            echo "Installing base build tools..."
-            apt-get update
-            apt-get install -y debhelper devscripts cdbs cmake build-essential git curl jq
-
-            echo "Building KStars Bleeding..."
-            ./scripts/build-package.sh kstars-bleeding
-
+            echo ""
             echo "Build artifacts:"
             ls -lh /workspace/build/output/
           '
 
     - name: Upload package artifacts
-      if: success()
+      if: success() && steps.detect.outputs.should_build == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: packages
@@ -147,7 +156,7 @@ jobs:
         if-no-files-found: warn
 
     - name: Upload build info
-      if: success()
+      if: success() && steps.detect.outputs.should_build == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: build-info
@@ -156,13 +165,13 @@ jobs:
           build/output/*.changes
         if-no-files-found: warn
 
-    - name: Auto-commit to astroberry64-repo
+    - name: Auto-deploy to testing suite
       if: |
-        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-        github.event_name == 'workflow_dispatch'
+        steps.detect.outputs.should_build == 'true' &&
+        ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+         github.event_name == 'workflow_dispatch')
       env:
         GH_TOKEN: ${{ secrets.ASTROBERRY64_REPO_TOKEN }}
-        SUITE: ${{ github.event.inputs.suite || 'testing' }}
       run: |
         # Only proceed if we have .deb files
         if ! ls build/output/*.deb 1> /dev/null 2>&1; then
@@ -178,15 +187,15 @@ jobs:
         git config user.name "Astroberry64 Bot"
         git config user.email "bot@astroberry64.github.io"
 
-        # Add all packages to the suite
+        # Add all packages to the testing suite (hardcoded)
         for deb in ${{ github.workspace }}/build/output/*.deb; do
           if [ -f "$deb" ]; then
-            echo "Adding $(basename $deb) to ${SUITE} suite..."
-            ./add-package.sh "$deb" "${SUITE}"
+            echo "Adding $(basename $deb) to testing suite..."
+            ./add-package.sh "$deb" "testing"
           fi
         done
 
         # Commit and push
-        git add dists/trixie-${SUITE} pool
-        git commit -m "Auto-add external packages to ${SUITE} suite"$'\n\n'"Built from ${{ github.repository }}@${{ github.sha }}"$'\n\n'"🤖 Automated build via GitHub Actions" || echo "No changes to commit"
+        git add dists/trixie-testing pool
+        git commit -m "Auto-add external packages to testing suite"$'\n\n'"Built from ${{ github.repository }}@${{ github.sha }}"$'\n\n'"🤖 Automated build via GitHub Actions" || echo "No changes to commit"
         git push origin main || echo "Nothing to push"
