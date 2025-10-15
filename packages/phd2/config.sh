@@ -49,8 +49,17 @@ DEB_PRIORITY="optional"
 DEB_MAINTAINER="Patrick Chevalley <pch@ap-i.net>"  # Keep upstream maintainer
 
 # === Build Configuration ===
-# Note: Using upstream default -DOPENSOURCE_ONLY=1 (INDI camera drivers only)
-# Proprietary camera SDKs can be enabled later once baseline is stable
+# Note: Proprietary camera SDKs are ENABLED via patches:
+#   - patches/debian/01-enable-proprietary-cameras.sh (sets OPENSOURCE_ONLY=0)
+#   - patches/source/02-enable-proprietary-cameras-linux.sh (fixes OGMA FetchContent)
+# This enables native support for:
+#   - ZWO/ASI cameras (libASICamera2)
+#   - QHY cameras (libqhyccd)
+#   - Player One cameras (libPlayerOneCamera)
+#   - SVBony cameras (libSVBCameraSDK)
+#   - ToupTek/Altair cameras
+#   - OGMA cameras
+# All ARM64 libraries are bundled in the PHD2 source repository
 CMAKE_FLAGS=""
 
 # === Package Metadata ===
@@ -61,6 +70,7 @@ HOMEPAGE="https://openphdguiding.org/"
 # - Source: OpenPHDGuiding/phd2 GitHub repository
 # - Tracks all tags (both stable releases and dev snapshots)
 # - Latest as of 2025-01-15: v2.6.13dev7
-# - Uses INDI camera drivers only (no proprietary SDKs in baseline)
+# - Includes INDI camera drivers PLUS proprietary SDKs (ZWO, QHY, Player One, SVBony, etc.)
 # - Depends on libindi-dev >= 2.0 from our repository
 # - Build uses system INDI (not bundled) via -DUSE_SYSTEM_LIBINDI=1
+# - Proprietary camera libraries are statically linked from bundled ARM64 binaries
