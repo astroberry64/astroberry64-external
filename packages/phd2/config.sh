@@ -6,6 +6,11 @@ SOURCE_TYPE="git"
 GIT_REPO="https://github.com/OpenPHDGuiding/phd2.git"
 GIT_TAG="v2.6.13dev7"  # Tracks all tags (stable + dev)
 
+# === Version Tracking ===
+# Controls automated version checking (check-all-updates.sh)
+VERSION_SOURCE="git-tags"           # PHD2 uses git tags, not GitHub Releases
+VERSION_INCLUDE_PRERELEASE="true"   # Include dev snapshots (v2.6.13dev7, etc.)
+
 # === Build System ===
 BUILD_SYSTEM="debian"  # Uses debian/ from git repo
 

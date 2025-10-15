@@ -6,6 +6,11 @@ SOURCE_TYPE="git"
 GIT_REPO="https://github.com/indilib/indi.git"
 GIT_TAG="v2.1.6"  # Latest as of 2025-10-08
 
+# === Version Tracking ===
+# Controls automated version checking (check-all-updates.sh)
+VERSION_SOURCE="github-releases"       # INDI uses GitHub Releases for stable versions
+VERSION_INCLUDE_PRERELEASE="false"     # Only track stable releases
+
 # === Build System ===
 BUILD_SYSTEM="debian"  # Uses debian/ from git repo
 

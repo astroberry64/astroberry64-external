@@ -6,6 +6,11 @@ SOURCE_TYPE="ppa"
 PPA_NAME="ppa:mutlaqja/ppa"
 PACKAGE_NAME="kstars-bleeding"
 
+# === Version Tracking ===
+# Controls automated version checking (check-all-updates.sh)
+VERSION_SOURCE="custom"                 # PPA version checking not yet implemented
+# TODO: Implement PPA version checking via Launchpad API
+
 # === Build System ===
 BUILD_SYSTEM="debian"
 

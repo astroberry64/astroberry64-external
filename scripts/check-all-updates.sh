@@ -197,6 +197,71 @@ check_git_version() {
     fi
 }
 
+# Check git tags (alternative to releases, includes dev tags)
+check_git_tags_version() {
+    local pkg_name="$1"
+    local git_repo="$2"
+    local current_tag="$3"
+    local include_prerelease="${4:-true}"
+
+    log_info "Checking git tags: $git_repo (current: $current_tag)" >&2
+
+    # Extract owner/repo from git URL
+    local repo_path
+    if [[ $git_repo =~ github\.com[:/]([^/]+/[^/]+)(\.git)?$ ]]; then
+        repo_path="${BASH_REMATCH[1]}"
+        repo_path="${repo_path%.git}"
+    else
+        log_warn "Cannot extract GitHub repo from: $git_repo" >&2
+        return 1
+    fi
+
+    # Query GitHub API for tags
+    local api_url="https://api.github.com/repos/$repo_path/tags"
+    local auth_header=""
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        auth_header="Authorization: Bearer $GITHUB_TOKEN"
+    fi
+
+    local response
+    if [ -n "$auth_header" ]; then
+        response=$(curl -s -H "$auth_header" "$api_url")
+    else
+        response=$(curl -s "$api_url")
+    fi
+
+    # Check if jq is available for better parsing
+    if ! command -v jq &> /dev/null; then
+        log_warn "jq not installed, using basic parsing" >&2
+        local latest_tag=$(echo "$response" | grep -o '"name": *"[^"]*"' | head -1 | sed 's/.*"name": *"\([^"]*\)".*/\1/')
+    else
+        # Use jq for proper JSON parsing and filtering
+        if [ "$include_prerelease" = "false" ]; then
+            # Filter out prerelease tags (dev, rc, beta, alpha)
+            latest_tag=$(echo "$response" | jq -r '[.[] | select(.name | test("^v?[0-9]+\\.[0-9]+\\.[0-9]+$"))] | .[0].name')
+        else
+            # Include all tags
+            latest_tag=$(echo "$response" | jq -r '.[0].name')
+        fi
+    fi
+
+    if [ -z "$latest_tag" ] || [ "$latest_tag" = "null" ]; then
+        log_warn "Could not fetch latest tag for $repo_path" >&2
+        return 1
+    fi
+
+    log_info "Latest version: $latest_tag" >&2
+
+    if version_greater_than "$latest_tag" "$current_tag"; then
+        log_update "$pkg_name: $current_tag → $latest_tag" >&2
+        echo "$latest_tag"
+        return 0
+    else
+        log_info "$pkg_name is up to date ($current_tag)" >&2
+        return 1
+    fi
+}
+
 check_ppa_version() {
     local pkg_name="$1"
     local ppa_name="$2"
@@ -247,35 +312,61 @@ for pkg in "${PACKAGES_TO_CHECK[@]}"; do
     # shellcheck source=/dev/null
     source "$CONFIG_FILE"
 
-    # Check based on SOURCE_TYPE
-    NEW_VERSION=""
-    case "${SOURCE_TYPE:-}" in
-        git)
-            if NEW_VERSION=$(check_git_version "$pkg" "$GIT_REPO" "$GIT_TAG"); then
-                update_config_file "$CONFIG_FILE" "GIT_TAG=\"$GIT_TAG\"" "GIT_TAG=\"$NEW_VERSION\""
-                UPDATES_FOUND=$((UPDATES_FOUND + 1))
-                UPDATED_PACKAGES+=("$pkg")
+    # Determine which version check method to use
+    VERSION_CHECK_SOURCE="${VERSION_SOURCE:-github-releases}"  # Default to github-releases for backwards compatibility
+    VERSION_INCLUDE_PRERELEASE="${VERSION_INCLUDE_PRERELEASE:-false}"
 
-                # Commit if requested
-                if [ $DO_COMMIT -eq 1 ] && [ $TEST_MODE -eq 0 ]; then
-                    cd "$REPO_ROOT"
-                    git add "$CONFIG_FILE"
-                    git commit -m "Auto-update $pkg to $NEW_VERSION"$'\n\n'"Updated GIT_TAG from $GIT_TAG to $NEW_VERSION"$'\n\n'"🤖 Automated version check"
-                    log_success "Committed update for $pkg"
+    # Check based on VERSION_SOURCE (or fall back to SOURCE_TYPE for compatibility)
+    NEW_VERSION=""
+    case "$VERSION_CHECK_SOURCE" in
+        git-tags)
+            # Check git tags instead of releases
+            if [ "${SOURCE_TYPE:-}" = "git" ]; then
+                if NEW_VERSION=$(check_git_tags_version "$pkg" "$GIT_REPO" "$GIT_TAG" "$VERSION_INCLUDE_PRERELEASE"); then
+                    update_config_file "$CONFIG_FILE" "GIT_TAG=\"$GIT_TAG\"" "GIT_TAG=\"$NEW_VERSION\""
+                    UPDATES_FOUND=$((UPDATES_FOUND + 1))
+                    UPDATED_PACKAGES+=("$pkg")
+
+                    # Commit if requested
+                    if [ $DO_COMMIT -eq 1 ] && [ $TEST_MODE -eq 0 ]; then
+                        cd "$REPO_ROOT"
+                        git add "$CONFIG_FILE"
+                        git commit -m "Auto-update $pkg to $NEW_VERSION"$'\n\n'"Updated GIT_TAG from $GIT_TAG to $NEW_VERSION"$'\n\n'"🤖 Automated version check"
+                        log_success "Committed update for $pkg"
+                    fi
                 fi
+            else
+                log_warn "$pkg: VERSION_SOURCE=git-tags requires SOURCE_TYPE=git"
+            fi
+            ;;
+        github-releases)
+            # Check GitHub releases (original behavior)
+            if [ "${SOURCE_TYPE:-}" = "git" ]; then
+                if NEW_VERSION=$(check_git_version "$pkg" "$GIT_REPO" "$GIT_TAG"); then
+                    update_config_file "$CONFIG_FILE" "GIT_TAG=\"$GIT_TAG\"" "GIT_TAG=\"$NEW_VERSION\""
+                    UPDATES_FOUND=$((UPDATES_FOUND + 1))
+                    UPDATED_PACKAGES+=("$pkg")
+
+                    # Commit if requested
+                    if [ $DO_COMMIT -eq 1 ] && [ $TEST_MODE -eq 0 ]; then
+                        cd "$REPO_ROOT"
+                        git add "$CONFIG_FILE"
+                        git commit -m "Auto-update $pkg to $NEW_VERSION"$'\n\n'"Updated GIT_TAG from $GIT_TAG to $NEW_VERSION"$'\n\n'"🤖 Automated version check"
+                        log_success "Committed update for $pkg"
+                    fi
+                fi
+            else
+                log_warn "$pkg: VERSION_SOURCE=github-releases requires SOURCE_TYPE=git"
             fi
             ;;
         ppa)
             log_warn "$pkg: PPA version checking not yet implemented"
             ;;
-        github-release)
-            log_warn "$pkg: GitHub release checking not yet implemented"
-            ;;
-        archived)
-            log_info "$pkg: Archived source, skipping version check"
+        custom)
+            log_info "$pkg: Custom version checking configured, skipping automated check"
             ;;
         *)
-            log_warn "$pkg: Unknown SOURCE_TYPE: ${SOURCE_TYPE:-none}"
+            log_warn "$pkg: Unknown VERSION_SOURCE: $VERSION_CHECK_SOURCE"
             ;;
     esac
 
