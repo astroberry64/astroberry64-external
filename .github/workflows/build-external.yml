@@ -36,6 +36,8 @@ jobs:
             - 'packages/indi/**'
           kstars-bleeding:
             - 'packages/kstars-bleeding/**'
+          phd2:
+            - 'packages/phd2/**'
 
     # Consolidated detection and verification - uses toJSON() for dynamic parsing
     - name: Detect and verify package
@@ -128,6 +130,7 @@ jobs:
         docker run --rm --platform linux/arm64 \
           -v ${{ github.workspace }}:/workspace \
           -w /workspace \
+          -e PACKAGE="$PACKAGE" \
           debian:trixie-slim \
           bash -c '
             set -e
@@ -142,8 +145,8 @@ jobs:
             apt-get update
             apt-get install -y debhelper devscripts cdbs cmake build-essential git curl jq
 
-            echo "Building '"$PACKAGE"'..."
-            ./scripts/build-package.sh '"$PACKAGE"'
+            echo "Building $PACKAGE..."
+            ./scripts/build-package.sh $PACKAGE
 
             echo ""
             echo "Build artifacts:"
