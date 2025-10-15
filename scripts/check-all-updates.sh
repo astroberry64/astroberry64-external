@@ -266,9 +266,62 @@ check_ppa_version() {
     local pkg_name="$1"
     local ppa_name="$2"
     local package_name="$3"
+    local current_version="$4"
 
-    log_info "Checking PPA: $ppa_name for package: $package_name"
-    log_warn "PPA version checking not yet implemented"
+    log_info "Checking PPA: $ppa_name for package: $package_name (current: $current_version)" >&2
+
+    # Parse PPA name (format: ppa:owner/archive or just owner/archive)
+    local ppa_owner ppa_archive
+    if [[ $ppa_name =~ ^ppa:([^/]+)/(.+)$ ]]; then
+        ppa_owner="${BASH_REMATCH[1]}"
+        ppa_archive="${BASH_REMATCH[2]}"
+    elif [[ $ppa_name =~ ^([^/]+)/(.+)$ ]]; then
+        ppa_owner="${BASH_REMATCH[1]}"
+        ppa_archive="${BASH_REMATCH[2]}"
+    else
+        log_warn "Cannot parse PPA name: $ppa_name" >&2
+        return 1
+    fi
+
+    # Query Launchpad API for published sources
+    local api_url="https://api.launchpad.net/1.0/~${ppa_owner}/+archive/ubuntu/${ppa_archive}"
+    local response
+    response=$(curl -s "${api_url}?ws.op=getPublishedSources&source_name=${package_name}&status=Published")
+
+    # Check if jq is available
+    if ! command -v jq &> /dev/null; then
+        log_warn "jq not installed, cannot parse PPA response" >&2
+        return 1
+    fi
+
+    # Extract latest version
+    local latest_version
+    latest_version=$(echo "$response" | jq -r '.entries[0].source_package_version' 2>/dev/null)
+
+    if [ -z "$latest_version" ] || [ "$latest_version" = "null" ]; then
+        log_warn "Could not fetch latest version for $package_name from $ppa_name" >&2
+        return 1
+    fi
+
+    log_info "Latest version: $latest_version" >&2
+
+    # Compare versions (PPA versions can be complex with epochs, so use dpkg --compare-versions if available)
+    if command -v dpkg &> /dev/null; then
+        if dpkg --compare-versions "$latest_version" gt "$current_version" 2>/dev/null; then
+            log_update "$pkg_name: $current_version → $latest_version" >&2
+            echo "$latest_version"
+            return 0
+        fi
+    else
+        # Fallback to simple string comparison
+        if [ "$latest_version" != "$current_version" ]; then
+            log_update "$pkg_name: $current_version → $latest_version" >&2
+            echo "$latest_version"
+            return 0
+        fi
+    fi
+
+    log_info "$pkg_name is up to date ($current_version)" >&2
     return 1
 }
 
@@ -360,7 +413,24 @@ for pkg in "${PACKAGES_TO_CHECK[@]}"; do
             fi
             ;;
         ppa)
-            log_warn "$pkg: PPA version checking not yet implemented"
+            # Check PPA version via Launchpad API
+            if [ "${SOURCE_TYPE:-}" = "ppa" ]; then
+                if NEW_VERSION=$(check_ppa_version "$pkg" "${PPA_NAME:-}" "${PACKAGE_NAME:-}" "${PPA_VERSION:-unknown}"); then
+                    update_config_file "$CONFIG_FILE" "PPA_VERSION=\"${PPA_VERSION:-unknown}\"" "PPA_VERSION=\"$NEW_VERSION\""
+                    UPDATES_FOUND=$((UPDATES_FOUND + 1))
+                    UPDATED_PACKAGES+=("$pkg")
+
+                    # Commit if requested
+                    if [ $DO_COMMIT -eq 1 ] && [ $TEST_MODE -eq 0 ]; then
+                        cd "$REPO_ROOT"
+                        git add "$CONFIG_FILE"
+                        git commit -m "Auto-update $pkg to $NEW_VERSION"$'\n\n'"Updated PPA_VERSION from ${PPA_VERSION:-unknown} to $NEW_VERSION"$'\n\n'"🤖 Automated version check"
+                        log_success "Committed update for $pkg"
+                    fi
+                fi
+            else
+                log_warn "$pkg: VERSION_SOURCE=ppa requires SOURCE_TYPE=ppa"
+            fi
             ;;
         custom)
             log_info "$pkg: Custom version checking configured, skipping automated check"
