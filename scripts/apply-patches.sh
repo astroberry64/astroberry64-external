@@ -17,10 +17,19 @@ patch_count=0
 # Apply debian/* patches
 if [ -d "$DEBIAN_PATCHES" ]; then
     echo "[apply-patches] Applying debian patches..."
+    # Apply .patch files
     for patch in "$DEBIAN_PATCHES"/*.patch; do
         if [ -f "$patch" ]; then
             echo "[apply-patches]   Applying $(basename "$patch")..."
             patch -d "$SOURCE_DIR" -p1 < "$patch"
+            patch_count=$((patch_count + 1))
+        fi
+    done
+    # Apply .sh scripts
+    for script in "$DEBIAN_PATCHES"/*.sh; do
+        if [ -f "$script" ] && [ -x "$script" ]; then
+            echo "[apply-patches]   Executing $(basename "$script")..."
+            cd "$SOURCE_DIR" && "$script"
             patch_count=$((patch_count + 1))
         fi
     done
