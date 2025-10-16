@@ -138,6 +138,10 @@ jobs:
             export BUILD_DIR=/workspace/build
             export OUTPUT_DIR=/workspace/build/output
 
+            echo "Installing ca-certificates first for HTTPS repository access..."
+            apt-get update
+            apt-get install -y ca-certificates
+
             echo "Adding Astroberry64 APT repository..."
             echo "deb [trusted=yes] https://astroberry64.github.io/astroberry64-repo/ trixie-testing main" > /etc/apt/sources.list.d/astroberry64.list
 
