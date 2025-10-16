@@ -2,12 +2,15 @@
 # Patch to enable proprietary camera SDKs on Linux
 #
 # Problem: When OPENSOURCE_ONLY=0, PHD2's thirdparty.cmake has TWO separate OGMA blocks:
-# 1. FetchContent the OGMA SDK (fails in disconnected build)
-# 2. find_library for OGMA drivers (fails - no bundled libraries on Linux)
+# 1. FetchContent the OGMA SDK at top level (wrapped in if(WIN32) by us)
+# 2. find_library for OGMA drivers inside if(UNIX AND NOT APPLE) block
 #
-# Solution: Wrap EACH block separately in if(WIN32) to skip OGMA on Linux
-# - OGMA cameras will only work on Windows
-# - Other proprietary cameras (ZWO, QHY, Player One, SVBony, ToupTek) will work on Linux
+# Solution:
+# - Block 1: Wrap FetchContent in if(WIN32) so ogmacamsdk_SOURCE_DIR is only defined on Windows
+# - Block 2: Wrap find_library in if(DEFINED ogmacamsdk_SOURCE_DIR) to skip when SDK wasn't fetched
+# This avoids impossible WIN32 check inside UNIX block (which copilot correctly flagged)
+#
+# Result: OGMA cameras only on Windows, other proprietary cameras (ZWO, QHY, Player One, SVBony, ToupTek) work on Linux
 
 set -e
 
@@ -19,7 +22,7 @@ if [ ! -f "$FILE" ]; then
 fi
 
 # Check if already patched
-if grep -q "if(WIN32)  # OGMA support is Windows-only" "$FILE"; then
+if grep -q "if(DEFINED ogmacamsdk_SOURCE_DIR)  # OGMA SDK was fetched" "$FILE"; then
     echo "[patch-sh] $FILE already patched, skipping"
     exit 0
 fi
@@ -57,12 +60,12 @@ if [ "$OGMA_APPEND_LINE" -le "$OGMA_FIND_LINE" ]; then
 fi
 
 # Insert endif() AFTER the append line (bottom first)
-sed -i "${OGMA_APPEND_LINE}a\\      endif()  # WIN32 - OGMA support" "$FILE"
+sed -i "${OGMA_APPEND_LINE}a\\      endif()  # OGMA SDK check" "$FILE"
 
-# Insert if(WIN32) BEFORE find_library (top second)
-sed -i "${OGMA_FIND_LINE}i\\      if(WIN32)  # OGMA support is Windows-only" "$FILE"
+# Insert if(DEFINED ogmacamsdk_SOURCE_DIR) BEFORE find_library (top second)
+sed -i "${OGMA_FIND_LINE}i\\      if(DEFINED ogmacamsdk_SOURCE_DIR)  # OGMA SDK was fetched (Windows only)" "$FILE"
 
-echo "[patch-sh] Wrapped OGMA find_library block (lines $OGMA_FIND_LINE-$OGMA_APPEND_LINE) in if(WIN32)"
+echo "[patch-sh] Wrapped OGMA find_library block (lines $OGMA_FIND_LINE-$OGMA_APPEND_LINE) in if(DEFINED ogmacamsdk_SOURCE_DIR)"
 
 #
 # Block 1: Wrap OGMA FetchContent in if(WIN32) - DO THIS SECOND
