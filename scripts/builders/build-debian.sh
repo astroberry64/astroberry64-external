@@ -28,6 +28,62 @@ fi
 # Change to source directory
 cd "$SOURCE_DIR"
 
+echo "[build-debian] === Auto-incrementing build number ==="
+
+# Get package name from debian/control
+PACKAGE_NAME=$(grep "^Package:" debian/control | head -1 | awk "{print \$2}")
+echo "[build-debian] Package: $PACKAGE_NAME"
+
+# Get current version from debian/changelog (handles both formats)
+CURRENT_FULL_VERSION=$(dpkg-parsechangelog -S Version)
+echo "[build-debian] Current version in git: $CURRENT_FULL_VERSION"
+
+# Extract upstream version (works with "2.6.13dev7" OR "2.6.13dev7-astroberry64.10")
+CURRENT_UPSTREAM=$(echo "$CURRENT_FULL_VERSION" | sed "s/-astroberry64\..*//")
+echo "[build-debian] Upstream version: $CURRENT_UPSTREAM"
+
+# Fetch latest version from astroberry64-repo
+LATEST_REPO_VERSION=$(curl -s "https://astroberry64.github.io/astroberry64-repo/dists/trixie-testing/main/binary-arm64/Packages.gz" | \
+  gunzip | \
+  awk "/^Package: ${PACKAGE_NAME}\$/,/^Version:/" | \
+  grep "^Version:" | \
+  head -1 | \
+  awk "{print \$2}")
+
+if [ -z "$LATEST_REPO_VERSION" ]; then
+  echo "[build-debian] No previous version found in repo, starting at .1"
+  NEW_BUILD=1
+else
+  echo "[build-debian] Latest in repo: $LATEST_REPO_VERSION"
+
+  # Parse repo version parts
+  REPO_UPSTREAM=$(echo "$LATEST_REPO_VERSION" | sed "s/-astroberry64\..*//")
+  REPO_BUILD=$(echo "$LATEST_REPO_VERSION" | grep -oP "astroberry64\.\K\d+" || echo "0")
+
+  # Compare upstream versions
+  if [ "$CURRENT_UPSTREAM" != "$REPO_UPSTREAM" ]; then
+    echo "[build-debian] Upstream version changed ($REPO_UPSTREAM → $CURRENT_UPSTREAM), resetting build to .1"
+    NEW_BUILD=1
+  else
+    echo "[build-debian] Upstream version unchanged, incrementing build number"
+    NEW_BUILD=$((REPO_BUILD + 1))
+  fi
+fi
+
+# Create new version string
+NEW_VERSION="${CURRENT_UPSTREAM}-astroberry64.${NEW_BUILD}"
+echo "[build-debian] New version: $NEW_VERSION"
+
+# Update debian/changelog (in CI only, not committed back to git)
+export DEBFULLNAME="Astroberry64 CI"
+export DEBEMAIL="ci@astroberry64.github.io"
+dch -b -v "$NEW_VERSION" "Automated build #${NEW_BUILD} from CI"
+
+echo ""
+echo "[build-debian] Updated debian/changelog (CI ephemeral):"
+head -5 debian/changelog
+echo ""
+
 # Build the package
 # -us -uc: Don't sign source/changes (we're not uploading to Debian)
 # -b: Binary-only build (no source package)
