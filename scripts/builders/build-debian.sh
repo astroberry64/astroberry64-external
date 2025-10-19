@@ -87,9 +87,11 @@ echo ""
 # Build the package
 # -us -uc: Don't sign source/changes (we're not uploading to Debian)
 # -b: Binary-only build (no source package)
-# DEB_BUILD_OPTIONS=parallel=N: Enable parallel build (works with CDBS)
-echo "[build-debian] Running dpkg-buildpackage with $(nproc) parallel jobs..."
-export DEB_BUILD_OPTIONS="parallel=$(nproc)"
+# DEB_BUILD_OPTIONS:
+#   parallel=N: Enable parallel build (works with CDBS)
+#   noautodbgsym: Don't create automatic debug symbol packages (saves space)
+echo "[build-debian] Running dpkg-buildpackage with $(nproc) parallel jobs (no debug packages)..."
+export DEB_BUILD_OPTIONS="parallel=$(nproc) noautodbgsym"
 dpkg-buildpackage -us -uc -b
 
 # Find the parent directory where .deb files were created
@@ -97,15 +99,28 @@ PARENT_DIR="$(dirname "$SOURCE_DIR")"
 
 echo "[build-debian] Build completed, collecting packages..."
 
-# Move all .deb files to output directory
+# Move all .deb files to output directory (skip debug packages)
 DEB_COUNT=0
+SKIPPED_COUNT=0
 for deb in "$PARENT_DIR"/*.deb; do
     if [ -f "$deb" ]; then
-        echo "[build-debian]   $(basename "$deb")"
-        mv "$deb" "$OUTPUT_DIR/"
-        DEB_COUNT=$((DEB_COUNT + 1))
+        BASENAME=$(basename "$deb")
+        # Skip debug packages (dbg, dbgsym)
+        if [[ "$BASENAME" =~ -dbg_ ]] || [[ "$BASENAME" =~ -dbgsym_ ]]; then
+            echo "[build-debian]   SKIP (debug): $BASENAME"
+            SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+            rm "$deb"  # Remove debug package
+        else
+            echo "[build-debian]   $(basename "$deb")"
+            mv "$deb" "$OUTPUT_DIR/"
+            DEB_COUNT=$((DEB_COUNT + 1))
+        fi
     fi
 done
+
+if [ $SKIPPED_COUNT -gt 0 ]; then
+    echo "[build-debian] Skipped $SKIPPED_COUNT debug package(s) to save space"
+fi
 
 # Also collect .buildinfo and .changes files for reference
 for file in "$PARENT_DIR"/*.{buildinfo,changes}; do
