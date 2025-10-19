@@ -74,11 +74,15 @@ jobs:
           # This automatically works for any packages defined in the filters!
           CHANGED_PACKAGES=$(echo "$FILTER_OUTPUTS" | jq -r 'to_entries | map(select(.value == "true")) | .[].key')
 
-          # Convert to bash array
-          readarray -t PACKAGES <<< "$CHANGED_PACKAGES"
-
-          # Remove empty elements
-          PACKAGES=("${PACKAGES[@]}")
+          # Convert to bash array and filter out empty elements
+          # Note: readarray with empty input creates array with one empty element, not empty array
+          readarray -t PACKAGES_RAW <<< "$CHANGED_PACKAGES"
+          PACKAGES=()
+          for pkg in "${PACKAGES_RAW[@]}"; do
+              if [ -n "$pkg" ]; then
+                  PACKAGES+=("$pkg")
+              fi
+          done
 
           echo "Detected ${#PACKAGES[@]} changed package(s)"
 
