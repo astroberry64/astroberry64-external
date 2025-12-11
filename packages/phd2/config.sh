@@ -4,7 +4,7 @@
 # === Source Configuration ===
 SOURCE_TYPE="git"
 GIT_REPO="https://github.com/OpenPHDGuiding/phd2.git"
-GIT_TAG="v2.6.13dev7"  # Tracks all tags (stable + dev)
+GIT_TAG="v2.6.14"  # Tracks all tags (stable + dev)
 
 # === Version Tracking ===
 # Controls automated version checking (check-all-updates.sh)
