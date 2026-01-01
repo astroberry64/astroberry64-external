@@ -9,7 +9,7 @@ PACKAGE_NAME="kstars-bleeding"
 # === Version Tracking ===
 # Controls automated version checking (check-all-updates.sh)
 VERSION_SOURCE="ppa"                    # Use Launchpad PPA API for version checking
-PPA_VERSION="6:3.8.0+202512011600~ubuntu24.04.1"  # Latest as of 2025-10-15
+PPA_VERSION="6:3.8.0+202512311631~ubuntu24.04.1"  # Latest as of 2025-10-15
 
 # === Build System ===
 BUILD_SYSTEM="debian"
