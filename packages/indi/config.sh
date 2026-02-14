@@ -4,7 +4,7 @@
 # === Source Configuration ===
 SOURCE_TYPE="git"
 GIT_REPO="https://github.com/indilib/indi.git"
-GIT_TAG="v2.1.8"  # Latest as of 2025-10-08
+GIT_TAG="v2.1.9"  # Latest as of 2025-10-08
 
 # === Version Tracking ===
 # Controls automated version checking (check-all-updates.sh)
